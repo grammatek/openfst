@@ -81,3 +81,21 @@ BUILDING WITH BAZEL:
 DOCUMENTATION:
   See www.openfst.org for general documentation.
   See ./NEWS for updates since the last release.
+
+BUILDING FOR ANDROID
+
+This branch has the changes necessary to compile OpenFst-1.8.1 for all Android platforms.
+
+Baiscally, the file configure.ac is patched to make cross compilation possible. And the
+file build-android.sh is used to call configure / make / make install with the right options.
+
+First, autoconf should be called, to update the file ./configure with the appropriate
+changes.
+
+Then one can set a few environment variables to influence build assumptions in
+build-android.sh.
+
+These variables are ANDROID_NDK, ANDROID_NDK_TOOLCHAIN, ANDROID_API, PREFIX. Pleased read
+the file build-android.sh carefully, how these are used and adapt them to your needs.
+
+Finally, call ./build-android.sh to configure/make/make install OpenFst.
