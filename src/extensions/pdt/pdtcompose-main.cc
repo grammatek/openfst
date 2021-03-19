@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -23,9 +37,9 @@ DECLARE_string(compose_filter);
 
 int pdtcompose_main(int argc, char **argv) {
   namespace s = fst::script;
-  using fst::ReadLabelPairs;
   using fst::PdtComposeFilter;
   using fst::PdtComposeOptions;
+  using fst::ReadLabelPairs;
   using fst::script::FstClass;
   using fst::script::VectorFstClass;
 
@@ -56,26 +70,29 @@ int pdtcompose_main(int argc, char **argv) {
   std::unique_ptr<FstClass> ifst2(FstClass::Read(in2_name));
   if (!ifst2) return 1;
 
-  if (FLAGS_pdt_parentheses.empty()) {
+  if (FST_FLAGS_pdt_parentheses.empty()) {
     LOG(ERROR) << argv[0] << ": No PDT parenthesis label pairs provided";
     return 1;
   }
 
   std::vector<std::pair<int64, int64>> parens;
-  if (!ReadLabelPairs(FLAGS_pdt_parentheses, &parens, false)) return 1;
+  if (!ReadLabelPairs(FST_FLAGS_pdt_parentheses, &parens, false))
+    return 1;
 
   VectorFstClass ofst(ifst1->ArcType());
 
   PdtComposeFilter compose_filter;
-  if (!s::GetPdtComposeFilter(FLAGS_compose_filter, &compose_filter)) {
+  if (!s::GetPdtComposeFilter(FST_FLAGS_compose_filter,
+                              &compose_filter)) {
     LOG(ERROR) << argv[0] << ": Unknown or unsupported compose filter type: "
-               << FLAGS_compose_filter;
+               << FST_FLAGS_compose_filter;
     return 1;
   }
 
-  const PdtComposeOptions copts(FLAGS_connect, compose_filter);
+  const PdtComposeOptions copts(FST_FLAGS_connect, compose_filter);
 
-  s::PdtCompose(*ifst1, *ifst2, parens, &ofst, copts, FLAGS_left_pdt);
+  s::PdtCompose(*ifst1, *ifst2, parens, &ofst, copts,
+                FST_FLAGS_left_pdt);
 
   return !ofst.Write(out_name);
 }

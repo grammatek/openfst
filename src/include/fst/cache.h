@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -29,8 +43,9 @@ struct CacheOptions {
   bool gc;          // Enables GC.
   size_t gc_limit;  // Number of bytes allowed before GC.
 
-  explicit CacheOptions(bool gc = FLAGS_fst_default_cache_gc,
-                        size_t gc_limit = FLAGS_fst_default_cache_gc_limit)
+  explicit CacheOptions(
+      bool gc = FST_FLAGS_fst_default_cache_gc,
+      size_t gc_limit = FST_FLAGS_fst_default_cache_gc_limit)
       : gc(gc), gc_limit(gc_limit) {}
 };
 
@@ -43,9 +58,10 @@ struct CacheImplOptions {
   CacheStore *store;  // Cache store.
   bool own_store;     // Should CacheImpl takes ownership of the store?
 
-  explicit CacheImplOptions(bool gc = FLAGS_fst_default_cache_gc,
-                            size_t gc_limit = FLAGS_fst_default_cache_gc_limit,
-                            CacheStore *store = nullptr)
+  explicit CacheImplOptions(
+      bool gc = FST_FLAGS_fst_default_cache_gc,
+      size_t gc_limit = FST_FLAGS_fst_default_cache_gc_limit,
+      CacheStore *store = nullptr)
       : gc(gc), gc_limit(gc_limit), store(store), own_store(true) {}
 
   explicit CacheImplOptions(const CacheOptions &opts)
@@ -866,8 +882,9 @@ class CacheBaseImpl : public FstImpl<typename State::Arc> {
         max_expanded_state_id_(-1),
         cache_gc_(opts.gc),
         cache_limit_(opts.gc_limit),
-        cache_store_(opts.store ? opts.store : new CacheStore(CacheOptions(
-                                                   opts.gc, opts.gc_limit))),
+        cache_store_(
+            opts.store ? opts.store
+                       : new CacheStore(CacheOptions(opts.gc, opts.gc_limit))),
         new_cache_store_(!opts.store),
         own_cache_store_(opts.store ? opts.own_store : true) {}
 
@@ -897,7 +914,9 @@ class CacheBaseImpl : public FstImpl<typename State::Arc> {
     }
   }
 
-  ~CacheBaseImpl() override { if (own_cache_store_) delete cache_store_; }
+  ~CacheBaseImpl() override {
+    if (own_cache_store_) delete cache_store_;
+  }
 
   void SetStart(StateId s) {
     cache_start_ = s;
@@ -911,23 +930,6 @@ class CacheBaseImpl : public FstImpl<typename State::Arc> {
     static constexpr auto flags = kCacheFinal | kCacheRecent;
     state->SetFlags(flags, flags);
   }
-
-// Disabled to ensure PushArc not AddArc is used in existing code
-// TODO(sorenj): re-enable for backing store
-#if 0
-  // AddArc adds a single arc to a state and does incremental cache
-  // book-keeping. For efficiency, prefer PushArc and SetArcs below
-  // when possible.
-  void AddArc(StateId s, const Arc &arc) {
-    auto *state = cache_store_->GetMutableState(s);
-    cache_store_->AddArc(state, arc);
-    if (arc.nextstate >= nknown_states_)
-      nknown_states_ = arc.nextstate + 1;
-    SetExpandedState(s);
-    static constexpr auto flags = kCacheArcs | kCacheRecent;
-    state->SetFlags(flags, flags);
-  }
-#endif
 
   // Adds a single arc to a state but delays cache book-keeping. SetArcs must
   // be called when all PushArc and EmplaceArc calls at a state are complete.
@@ -1296,7 +1298,7 @@ class ExpanderCacheStore {
       : store_(opts) {}
 
   template <class Expander>
-  State *FindOrExpand(Expander &expander, StateId s) {  // NOLINT
+  State *FindOrExpand(Expander &expander, StateId s) {
     auto *state = store_.GetMutableState(s);
     if (state->Flags()) {
       state->SetFlags(kCacheRecent, kCacheRecent);

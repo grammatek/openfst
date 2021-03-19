@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 
@@ -27,7 +41,8 @@ struct ShortestPathOptions : public ShortestDistanceOptions {
   ShortestPathOptions(QueueType queue_type, int32 nshortest, bool unique,
                       float delta, const WeightClass &weight_threshold,
                       int64 state_threshold = kNoStateId)
-      : ShortestDistanceOptions(queue_type, ANY_ARC_FILTER, kNoStateId, delta),
+      : ShortestDistanceOptions(queue_type, ArcFilterType::ANY, kNoStateId,
+                                delta),
         nshortest(nshortest),
         unique(unique),
         weight_threshold(weight_threshold),
@@ -44,13 +59,19 @@ void ShortestPath(const Fst<Arc> &ifst, MutableFst<Arc> *ofst,
                   const ShortestPathOptions &opts) {
   using ArcFilter = AnyArcFilter<Arc>;
   using Weight = typename Arc::Weight;
-  const std::unique_ptr<Queue> queue(
-      QueueConstructor<Arc, Queue, ArcFilter>::Construct(ifst, distance));
-  const fst::ShortestPathOptions<Arc, Queue, ArcFilter> sopts(
-      queue.get(), ArcFilter(), opts.nshortest, opts.unique,
-      /* has_distance=*/false, opts.delta, /* first_path=*/false,
-      *opts.weight_threshold.GetWeight<Weight>(), opts.state_threshold);
-  ShortestPath(ifst, ofst, distance, sopts);
+  if constexpr (IsPath<Weight>::value) {
+    const std::unique_ptr<Queue> queue(
+        QueueConstructor<Arc, Queue, ArcFilter>::Construct(ifst, distance));
+    const fst::ShortestPathOptions<Arc, Queue, ArcFilter> sopts(
+        queue.get(), ArcFilter(), opts.nshortest, opts.unique,
+        /* has_distance=*/false, opts.delta, /* first_path=*/false,
+        *opts.weight_threshold.GetWeight<Weight>(), opts.state_threshold);
+    ShortestPath(ifst, ofst, distance, sopts);
+  } else {
+    FSTERROR() << "ShortestPath: Weight needs to have the path property: "
+               << Arc::Weight::Type();
+    ofst->SetProperties(kError, kError);
+  }
 }
 
 template <class Arc>
@@ -73,9 +94,14 @@ void ShortestPath(const Fst<Arc> &ifst, MutableFst<Arc> *ofst,
       return;
     }
     case SHORTEST_FIRST_QUEUE: {
-      ShortestPath<Arc, NaturalShortestFirstQueue<StateId, Weight>>(ifst, ofst,
-                                                                    &distance,
-                                                                    opts);
+      if constexpr (IsIdempotent<Weight>::value) {
+        ShortestPath<Arc, NaturalShortestFirstQueue<StateId, Weight>>(
+            ifst, ofst, &distance, opts);
+      } else {
+        FSTERROR() << "ShortestPath: Bad queue type SHORTEST_FIRST_QUEUE for"
+                   << " non-idempotent Weight " << Weight::Type();
+        ofst->SetProperties(kError, kError);
+      }
       return;
     }
     case STATE_ORDER_QUEUE: {
@@ -87,8 +113,7 @@ void ShortestPath(const Fst<Arc> &ifst, MutableFst<Arc> *ofst,
       return;
     }
     default: {
-      FSTERROR() << "ShortestPath: Unknown queue type: "
-                 << opts.queue_type;
+      FSTERROR() << "ShortestPath: Unknown queue type: " << opts.queue_type;
       ofst->SetProperties(kError, kError);
       return;
     }

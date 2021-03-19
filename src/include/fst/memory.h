@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -6,6 +20,7 @@
 #ifndef FST_MEMORY_H_
 #define FST_MEMORY_H_
 
+#include <cstddef>
 #include <list>
 #include <memory>
 #include <utility>
@@ -43,25 +58,23 @@ class MemoryArenaImpl : public MemoryArenaBase {
 
   explicit MemoryArenaImpl(size_t block_size = kAllocSize)
       : block_size_(block_size * kObjectSize), block_pos_(0) {
-    blocks_.emplace_front(new char[block_size_]);
+    blocks_.emplace_front(std::make_unique<std::byte[]>(block_size_));
   }
 
   void *Allocate(size_t size) {
     const auto byte_size = size * kObjectSize;
     if (byte_size * kAllocFit > block_size_) {
       // Large block; adds new large block.
-      auto *ptr = new char[byte_size];
-      blocks_.emplace_back(ptr);
-      return ptr;
-    }
+      blocks_.emplace_back(std::make_unique<std::byte[]>(byte_size));
+      return blocks_.back().get();
+  }
     if (block_pos_ + byte_size > block_size_) {
       // Doesn't fit; adds new standard block.
-      auto *ptr = new char[block_size_];
       block_pos_ = 0;
-      blocks_.emplace_front(ptr);
+      blocks_.emplace_front(std::make_unique<std::byte[]>(block_size_));
     }
     // Fits; uses current block.
-    auto *ptr = blocks_.front().get() + block_pos_;
+    auto *ptr = &blocks_.front()[block_pos_];
     block_pos_ += byte_size;
     return ptr;
   }
@@ -70,8 +83,8 @@ class MemoryArenaImpl : public MemoryArenaBase {
 
  private:
   const size_t block_size_;  // Default block size in bytes.
-  size_t block_pos_;   // Current position in block in bytes.
-  std::list<std::unique_ptr<char[]>> blocks_;  // List of allocated blocks.
+  size_t block_pos_;         // Current position in block in bytes.
+  std::list<std::unique_ptr<std::byte[]>> blocks_;  // List of allocated blocks.
 };
 
 }  // namespace internal
@@ -99,7 +112,7 @@ class MemoryPoolImpl : public MemoryPoolBase {
   enum { kObjectSize = object_size };
 
   struct Link {
-    char buf[kObjectSize];
+    std::byte buf[kObjectSize];
     Link *next;
   };
 
@@ -130,7 +143,7 @@ class MemoryPoolImpl : public MemoryPoolBase {
 
  private:
   MemoryArena<Link> mem_arena_;
-  Link *free_list_;
+  Link *free_list_;  // Not owned.
 
   MemoryPoolImpl(const MemoryPoolImpl &) = delete;
   MemoryPoolImpl &operator=(const MemoryPoolImpl &) = delete;
@@ -148,7 +161,7 @@ template <typename T>
 class MemoryPool : public internal::MemoryPoolImpl<sizeof(T)> {
  public:
   // 'pool_size' specifies the size of the initial pool and how it is extended.
-  MemoryPool(size_t pool_size = kAllocSize)
+  explicit MemoryPool(size_t pool_size = kAllocSize)
       : internal::MemoryPoolImpl<sizeof(T)>(pool_size) {}
 };
 
@@ -157,30 +170,22 @@ class MemoryArenaCollection {
  public:
   // 'block_size' specifies the block size of the arenas.
   explicit MemoryArenaCollection(size_t block_size = kAllocSize)
-      : block_size_(block_size), ref_count_(1) {}
+      : block_size_(block_size) {}
 
   template <typename T>
   MemoryArena<T> *Arena() {
     if (sizeof(T) >= arenas_.size()) arenas_.resize(sizeof(T) + 1);
-    MemoryArenaBase *arena = arenas_[sizeof(T)].get();
+    auto &arena = arenas_[sizeof(T)];
     if (arena == nullptr) {
-      arena = new MemoryArena<T>(block_size_);
-      arenas_[sizeof(T)].reset(arena);
+      arena = std::make_unique<MemoryArena<T>>(block_size_);
     }
-    return static_cast<MemoryArena<T> *>(arena);
+    return static_cast<MemoryArena<T> *>(arena.get());
   }
 
   size_t BlockSize() const { return block_size_; }
 
-  size_t RefCount() const { return ref_count_; }
-
-  size_t IncrRefCount() { return ++ref_count_; }
-
-  size_t DecrRefCount() { return --ref_count_; }
-
  private:
   size_t block_size_;
-  size_t ref_count_;
   std::vector<std::unique_ptr<MemoryArenaBase>> arenas_;
 };
 
@@ -189,30 +194,20 @@ class MemoryPoolCollection {
  public:
   // 'pool_size' specifies the size of initial pool and how it is extended.
   explicit MemoryPoolCollection(size_t pool_size = kAllocSize)
-      : pool_size_(pool_size), ref_count_(1) {}
+      : pool_size_(pool_size) {}
 
   template <typename T>
   MemoryPool<T> *Pool() {
     if (sizeof(T) >= pools_.size()) pools_.resize(sizeof(T) + 1);
-    MemoryPoolBase *pool = pools_[sizeof(T)].get();
-    if (pool == nullptr) {
-      pool = new MemoryPool<T>(pool_size_);
-      pools_[sizeof(T)].reset(pool);
-    }
-    return static_cast<MemoryPool<T> *>(pool);
+    auto &pool = pools_[sizeof(T)];
+    if (pool == nullptr) pool = std::make_unique<MemoryPool<T>>(pool_size_);
+    return static_cast<MemoryPool<T> *>(pool.get());
   }
 
   size_t PoolSize() const { return pool_size_; }
 
-  size_t RefCount() const { return ref_count_; }
-
-  size_t IncrRefCount() { return ++ref_count_; }
-
-  size_t DecrRefCount() { return --ref_count_; }
-
  private:
   size_t pool_size_;
-  size_t ref_count_;
   std::vector<std::unique_ptr<MemoryPoolBase>> pools_;
 };
 
@@ -243,22 +238,17 @@ class BlockAllocator {
   };
 
   explicit BlockAllocator(size_t block_size = kAllocSize)
-      : arenas_(new MemoryArenaCollection(block_size)) {}
+      : arenas_(std::make_shared<MemoryArenaCollection>(block_size)) {}
 
-  BlockAllocator(const BlockAllocator<T> &arena_alloc)
-      : arenas_(arena_alloc.Arenas()) {
-    Arenas()->IncrRefCount();
-  }
+  ~BlockAllocator() = default;
+  BlockAllocator(const BlockAllocator &) = default;
+  BlockAllocator(BlockAllocator &&) = default;
+  BlockAllocator &operator=(const BlockAllocator &) = default;
+  BlockAllocator &operator=(BlockAllocator &&) = default;
 
   template <typename U>
   explicit BlockAllocator(const BlockAllocator<U> &arena_alloc)
-      : arenas_(arena_alloc.Arenas()) {
-    Arenas()->IncrRefCount();
-  }
-
-  ~BlockAllocator() {
-    if (Arenas()->DecrRefCount() == 0) delete Arenas();
-  }
+      : arenas_(arena_alloc.Arenas()) {}
 
   pointer address(reference ref) const { return Allocator().address(ref); }
 
@@ -287,14 +277,12 @@ class BlockAllocator {
     if (n * kAllocFit > kAllocSize) Allocator().deallocate(p, n);
   }
 
-  MemoryArenaCollection *Arenas() const { return arenas_; }
+  std::shared_ptr<MemoryArenaCollection> Arenas() const { return arenas_; }
 
  private:
   MemoryArena<T> *Arena() { return arenas_->Arena<T>(); }
 
-  MemoryArenaCollection *arenas_;
-
-  BlockAllocator<T> operator=(const BlockAllocator &);
+  std::shared_ptr<MemoryArenaCollection> arenas_;
 };
 
 template <typename T, typename U>
@@ -335,22 +323,17 @@ class PoolAllocator {
   };
 
   explicit PoolAllocator(size_t pool_size = kAllocSize)
-      : pools_(new MemoryPoolCollection(pool_size)) {}
+      : pools_(std::make_shared<MemoryPoolCollection>(pool_size)) {}
 
-  PoolAllocator(const PoolAllocator<T> &pool_alloc)
-      : pools_(pool_alloc.Pools()) {
-    Pools()->IncrRefCount();
-  }
+  ~PoolAllocator() = default;
+  PoolAllocator(const PoolAllocator &) = default;
+  PoolAllocator(PoolAllocator &&) = default;
+  PoolAllocator &operator=(const PoolAllocator &) = default;
+  PoolAllocator &operator=(PoolAllocator &&) = default;
 
   template <typename U>
   explicit PoolAllocator(const PoolAllocator<U> &pool_alloc)
-      : pools_(pool_alloc.Pools()) {
-    Pools()->IncrRefCount();
-  }
-
-  ~PoolAllocator() {
-    if (Pools()->DecrRefCount() == 0) delete Pools();
-  }
+      : pools_(pool_alloc.Pools()) {}
 
   pointer address(reference ref) const { return Allocator().address(ref); }
 
@@ -407,7 +390,7 @@ class PoolAllocator {
     }
   }
 
-  MemoryPoolCollection *Pools() const { return pools_; }
+  std::shared_ptr<MemoryPoolCollection> Pools() const { return pools_; }
 
  private:
   template <int n>
@@ -420,9 +403,7 @@ class PoolAllocator {
     return pools_->Pool<TN<n>>();
   }
 
-  MemoryPoolCollection *pools_;
-
-  PoolAllocator<T> operator=(const PoolAllocator &);
+  std::shared_ptr<MemoryPoolCollection> pools_;
 };
 
 template <typename T, typename U>

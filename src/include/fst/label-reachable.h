@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -7,6 +21,7 @@
 #ifndef FST_LABEL_REACHABLE_H_
 #define FST_LABEL_REACHABLE_H_
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -51,7 +66,14 @@ class LabelReachableData {
 
   int NumIntervalSets() const { return interval_sets_.size(); }
 
-  std::unordered_map<Label, Label> *Label2Index() {
+  std::unordered_map<Label, Label> *MutableLabel2Index() {
+    if (!have_relabel_data_) {
+      FSTERROR() << "LabelReachableData: No relabeling data";
+    }
+    return &label2index_;
+  }
+
+  const std::unordered_map<Label, Label> *Label2Index() const {
     if (!have_relabel_data_) {
       FSTERROR() << "LabelReachableData: No relabeling data";
     }
@@ -64,14 +86,15 @@ class LabelReachableData {
 
   static LabelReachableData *Read(std::istream &istrm,
                                   const FstReadOptions &opts) {
-    auto *data = new LabelReachableData();
+    // NB: Using `new` to access private constructor.
+    auto data = fst::WrapUnique(new LabelReachableData());
     ReadType(istrm, &data->reach_input_);
     ReadType(istrm, &data->keep_relabel_data_);
     data->have_relabel_data_ = data->keep_relabel_data_;
     if (data->keep_relabel_data_) ReadType(istrm, &data->label2index_);
     ReadType(istrm, &data->final_label_);
     ReadType(istrm, &data->interval_sets_);
-    return data;
+    return data.release();
   }
 
   bool Write(std::ostream &ostrm, const FstWriteOptions &opts) const {
@@ -166,12 +189,13 @@ class LabelReachable {
   using Interval = typename LabelIntervalSet::Interval;
 
   LabelReachable(const Fst<Arc> &fst, bool reach_input,
-                 Accumulator *accumulator = nullptr,
+                 std::unique_ptr<Accumulator> accumulator = nullptr,
                  bool keep_relabel_data = true)
-      : fst_(new VectorFst<Arc>(fst)),
+      : fst_(std::make_unique<VectorFst<Arc>>(fst)),
         s_(kNoStateId),
         data_(std::make_shared<Data>(reach_input, keep_relabel_data)),
-        accumulator_(accumulator ? accumulator : new Accumulator()),
+        accumulator_(accumulator ? std::move(accumulator)
+                                 : std::make_unique<Accumulator>()),
         ncalls_(0),
         nintervals_(0),
         reach_fst_input_(false),
@@ -183,10 +207,11 @@ class LabelReachable {
   }
 
   explicit LabelReachable(std::shared_ptr<Data> data,
-                          Accumulator *accumulator = nullptr)
+                          std::unique_ptr<Accumulator> accumulator = nullptr)
       : s_(kNoStateId),
         data_(std::move(data)),
-        accumulator_(accumulator ? accumulator : new Accumulator()),
+        accumulator_(accumulator ? std::move(accumulator)
+                                 : std::make_unique<Accumulator>()),
         ncalls_(0),
         nintervals_(0),
         reach_fst_input_(false),
@@ -196,7 +221,8 @@ class LabelReachable {
                  bool safe = false)
       : s_(kNoStateId),
         data_(reachable.data_),
-        accumulator_(new Accumulator(*reachable.accumulator_, safe)),
+        accumulator_(
+            std::make_unique<Accumulator>(*reachable.accumulator_, safe)),
         ncalls_(0),
         nintervals_(0),
         reach_fst_input_(reachable.reach_fst_input_),
@@ -479,7 +505,7 @@ class LabelReachable {
     auto &interval_sets = *data_->MutableIntervalSets();
     interval_sets = state_reachable.IntervalSets();
     interval_sets.resize(ins);
-    auto &label2index = *data_->Label2Index();
+    auto &label2index = *data_->MutableLabel2Index();
     for (const auto &kv : label2state_) {
       Label i = state2index[kv.second];
       label2index[kv.first] = i;

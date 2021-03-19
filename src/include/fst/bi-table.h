@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -11,13 +25,14 @@
 #include <functional>
 #include <memory>
 #include <type_traits>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include <fst/types.h>
 #include <fst/log.h>
 #include <fst/memory.h>
+#include <fst/windows_defs.inc>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace fst {
@@ -96,7 +111,7 @@ class HashBiTable {
 };
 
 // Enables alternative hash set representations below.
-enum HSType { HS_STL = 0, HS_DENSE = 1, HS_SPARSE = 2, HS_FLAT = 3 };
+enum HSType { HS_STL, HS_FLAT };
 
 // Default hash set is STL hash_set.
 template <class K, class H, class E, HSType HS>
@@ -292,7 +307,7 @@ class VectorBiTable {
 // fingerprinting functor FP returns a unique fingerprint for each entry to be
 // hashed in the vector (these need to be suitable for indexing in a vector).
 // The hash functor H is used when hashing entry into the compact hash table.
-template <class I, class T, class S, class FP, class H, HSType HS = HS_DENSE>
+template <class I, class T, class S, class FP, class H, HSType HS = HS_FLAT>
 class VectorHashBiTable {
  public:
   friend class HashFunc;
@@ -366,7 +381,6 @@ class VectorHashBiTable {
 
  private:
   static constexpr I kCurrentKey = -1;
-  static constexpr I kEmptyKey = -2;
 
   class HashFunc {
    public:
@@ -427,9 +441,6 @@ class VectorHashBiTable {
 
 template <class I, class T, class S, class FP, class H, HSType HS>
 constexpr I VectorHashBiTable<I, T, S, FP, H, HS>::kCurrentKey;
-
-template <class I, class T, class S, class FP, class H, HSType HS>
-constexpr I VectorHashBiTable<I, T, S, FP, H, HS>::kEmptyKey;
 
 // An implementation using a hash map for the entry to ID mapping. This version
 // permits erasing of arbitrary states. The entry T must have == defined and

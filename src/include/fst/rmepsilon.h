@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -9,7 +23,6 @@
 #include <forward_list>
 #include <stack>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -26,6 +39,7 @@
 #include <fst/shortest-distance.h>
 #include <fst/topsort.h>
 
+#include <unordered_map>
 
 namespace fst {
 
@@ -107,7 +121,7 @@ class RmEpsilonState {
   };
 
   using ElementMap = std::unordered_map<Element, std::pair<StateId, size_t>,
-                                        ElementHash, ElementEqual>;
+                                         ElementHash, ElementEqual>;
 
   const Fst<Arc> &fst_;
   // Distance from state being expanded in epsilon-closure.
@@ -140,7 +154,9 @@ void RmEpsilonState<Arc, Queue>::Expand(typename Arc::StateId source) {
   while (!eps_queue_.empty()) {
     const auto state = eps_queue_.top();
     eps_queue_.pop();
-    while (visited_.size() <= state) visited_.push_back(false);
+    if (static_cast<decltype(state)>(visited_.size()) <= state) {
+      visited_.resize(state + 1, false);
+    }
     if (visited_[state]) continue;
     visited_[state] = true;
     visited_states_.push_front(state);
@@ -149,7 +165,10 @@ void RmEpsilonState<Arc, Queue>::Expand(typename Arc::StateId source) {
       auto arc = aiter.Value();
       arc.weight = Times((*distance_)[state], arc.weight);
       if (eps_filter_(arc)) {
-        while (visited_.size() <= arc.nextstate) visited_.push_back(false);
+        if (static_cast<decltype(arc.nextstate)>(visited_.size()) <=
+            arc.nextstate) {
+          visited_.resize(arc.nextstate + 1, false);
+        }
         if (!visited_[arc.nextstate]) eps_queue_.push(arc.nextstate);
       } else {
         const Element element(arc.ilabel, arc.olabel, arc.nextstate);
@@ -275,7 +294,14 @@ void RmEpsilon(MutableFst<Arc> *fst,
       kFstProperties);
   if (opts.weight_threshold != Weight::Zero() ||
       opts.state_threshold != kNoStateId) {
-    Prune(fst, opts.weight_threshold, opts.state_threshold);
+    if constexpr (IsPath<Weight>::value) {
+      Prune(fst, opts.weight_threshold, opts.state_threshold);
+    } else {
+      FSTERROR() << "RmEpsilon: Weight must have path property: "
+                 << Weight::Type();
+      fst->SetProperties(kError, kError);
+      return;
+    }
   }
   if (opts.connect && opts.weight_threshold == Weight::Zero() &&
       opts.state_threshold == kNoStateId) {
@@ -538,7 +564,7 @@ class ArcIterator<RmEpsilonFst<Arc>>
 template <class Arc>
 inline void RmEpsilonFst<Arc>::InitStateIterator(
     StateIteratorData<Arc> *data) const {
-  data->base = new StateIterator<RmEpsilonFst<Arc>>(*this);
+  data->base = std::make_unique<StateIterator<RmEpsilonFst<Arc>>>(*this);
 }
 
 // Useful alias when using StdArc.

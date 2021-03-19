@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -8,7 +22,7 @@
 
 #include <fst/flags.h>
 #include <fst/extensions/far/farscript.h>
-#include <fst/extensions/far/getters.h>
+#include <fst/script/getters.h>
 
 DECLARE_string(filename_prefix);
 DECLARE_string(filename_suffix);
@@ -42,22 +56,27 @@ int farprintstrings_main(int argc, char **argv) {
   if (arc_type.empty()) return 1;
 
   fst::FarEntryType entry_type;
-  if (!s::GetFarEntryType(FLAGS_entry_type, &entry_type)) {
-    LOG(ERROR) << "Unknown or unsupported FAR entry type: " << FLAGS_entry_type;
+  if (!s::GetFarEntryType(FST_FLAGS_entry_type, &entry_type)) {
+    LOG(ERROR) << "Unknown or unsupported FAR entry type: "
+               << FST_FLAGS_entry_type;
     return 1;
   }
 
-  fst::FarTokenType token_type;
-  if (!s::GetFarTokenType(FLAGS_token_type, &token_type)) {
-    LOG(ERROR) << "Unknown or unsupported FAR token type: " << FLAGS_token_type;
+  fst::TokenType token_type;
+  if (!s::GetTokenType(FST_FLAGS_token_type, &token_type)) {
+    LOG(ERROR) << "Unknown or unsupported FAR token type: "
+               << FST_FLAGS_token_type;
     return 1;
   }
 
-  s::FarPrintStrings(in_sources, arc_type, entry_type, token_type,
-                     FLAGS_begin_key, FLAGS_end_key, FLAGS_print_key,
-                     FLAGS_print_weight, FLAGS_symbols, FLAGS_initial_symbols,
-                     FLAGS_generate_filenames, FLAGS_filename_prefix,
-                     FLAGS_filename_suffix);
+  s::FarPrintStrings(
+      in_sources, arc_type, entry_type, token_type,
+      FST_FLAGS_begin_key, FST_FLAGS_end_key,
+      FST_FLAGS_print_key, FST_FLAGS_print_weight,
+      FST_FLAGS_symbols, FST_FLAGS_initial_symbols,
+      FST_FLAGS_generate_filenames,
+      FST_FLAGS_filename_prefix,
+      FST_FLAGS_filename_suffix);
 
   return 0;
 }

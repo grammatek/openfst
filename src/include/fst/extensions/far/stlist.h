@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -20,6 +34,7 @@
 
 #include <fstream>
 #include <fst/util.h>
+#include <string_view>
 
 namespace fst {
 
@@ -177,7 +192,7 @@ class STListReader {
     error_ = true;
   }
 
-  bool Find(const std::string &key) {
+  bool Find(std::string_view key) {
     FSTERROR() << "STListReader::Find: Operation not supported";
     error_ = true;
     return false;
@@ -260,7 +275,16 @@ bool ReadSTListHeader(const std::string &source, Header *header) {
   }
   std::string key;
   ReadType(strm, &key);
-  header->Read(strm, source + ":" + key);
+  if (!strm) {
+    LOG(ERROR) << "ReadSTListHeader: Error reading key: " << source;
+    return false;
+  }
+  // Empty key is written last, so this is an empty STList.
+  if (key.empty()) return true;
+  if (!header->Read(strm, source + ":" + key)) {
+    LOG(ERROR) << "ReadSTListHeader: Error reading FstHeader: " << source;
+    return false;
+  }
   if (!strm) {
     LOG(ERROR) << "ReadSTListHeader: Error reading file: " << source;
     return false;

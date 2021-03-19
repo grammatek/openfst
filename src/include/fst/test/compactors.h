@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #ifndef FST_TEST_COMPACTORS_H_
 #define FST_TEST_COMPACTORS_H_
 
@@ -67,7 +81,8 @@ class TrivialCompactor {
   using StateId = typename Arc::StateId;
   using Weight = typename Arc::Weight;
 
-  TrivialCompactor() { CHECK(false); }
+  // Any empty FST is OK.
+  TrivialCompactor() : fst_(new VectorFst<Arc>) {}
 
   // Constructor from the Fst to be compacted.  If compactor is present,
   // only optional state should be copied from it.
@@ -91,7 +106,7 @@ class TrivialCompactor {
     State(const TrivialCompactor *c, StateId s)
         : c_(c),
           s_(s),
-          i_(fst::make_unique<ArcIterator<Fst<Arc>>>(*c->fst_, s)) {}
+          i_(std::make_unique<ArcIterator<Fst<Arc>>>(*c->fst_, s)) {}
     StateId GetStateId() const { return s_; }
     Weight Final() const { return c_->fst_->Final(s_); }
     size_t NumArcs() const { return c_->fst_->NumArcs(s_); }

@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 
@@ -22,9 +36,10 @@ template <class Label>
 class PhiFstMatcherData {
  public:
   explicit PhiFstMatcherData(
-      Label phi_label = FLAGS_phi_fst_phi_label,
-      bool phi_loop = FLAGS_phi_fst_phi_loop,
-      MatcherRewriteMode rewrite_mode = RewriteMode(FLAGS_phi_fst_rewrite_mode))
+      Label phi_label = FST_FLAGS_phi_fst_phi_label,
+      bool phi_loop = FST_FLAGS_phi_fst_phi_loop,
+      MatcherRewriteMode rewrite_mode =
+          RewriteMode(FST_FLAGS_phi_fst_rewrite_mode))
       : phi_label_(phi_label),
         phi_loop_(phi_loop),
         rewrite_mode_(rewrite_mode) {}
@@ -91,7 +106,8 @@ class PhiFstMatcher : public PhiMatcher<M> {
   enum : uint8 { kFlags = flags };
 
   // This makes a copy of the FST.
-  PhiFstMatcher(const FST &fst, MatchType match_type,
+  PhiFstMatcher(
+      const FST &fst, MatchType match_type,
       std::shared_ptr<MatcherData> data = std::make_shared<MatcherData>())
       : PhiMatcher<M>(fst, match_type,
                       PhiLabel(match_type, data ? data->PhiLabel()
@@ -101,7 +117,8 @@ class PhiFstMatcher : public PhiMatcher<M> {
         data_(data) {}
 
   // This doesn't copy the FST.
-  PhiFstMatcher(const FST *fst, MatchType match_type,
+  PhiFstMatcher(
+      const FST *fst, MatchType match_type,
       std::shared_ptr<MatcherData> data = std::make_shared<MatcherData>())
       : PhiMatcher<M>(fst, match_type,
                       PhiLabel(match_type, data ? data->PhiLabel()

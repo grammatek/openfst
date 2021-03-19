@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -24,9 +38,12 @@
 #include <fst/types.h>
 #include <fst/log.h>
 #include <fstream>
+#include <fst/mapped-file.h>
 
 #include <fst/flags.h>
 #include <unordered_map>
+#include <string_view>
+#include <optional>
 
 
 // Utility for error handling.
@@ -34,7 +51,7 @@
 DECLARE_bool(fst_error_fatal);
 
 #define FSTERROR() \
-  (FLAGS_fst_error_fatal ? LOG(FATAL) : LOG(ERROR))
+  (FST_FLAGS_fst_error_fatal ? LOG(FATAL) : LOG(ERROR))
 
 namespace fst {
 
@@ -44,20 +61,20 @@ namespace fst {
 
 // Generic case.
 template <class T,
-    typename std::enable_if<std::is_class<T>::value, T>::type* = nullptr>
+          typename std::enable_if<std::is_class<T>::value, T>::type * = nullptr>
 inline std::istream &ReadType(std::istream &strm, T *t) {
   return t->Read(strm);
 }
 
 // Numeric (boolean, integral, floating-point) case.
-template <class T,
-    typename std::enable_if<std::is_arithmetic<T>::value, T>::type* = nullptr>
+template <class T, typename std::enable_if<std::is_arithmetic<T>::value,
+                                           T>::type * = nullptr>
 inline std::istream &ReadType(std::istream &strm, T *t) {
-  return strm.read(reinterpret_cast<char *>(t), sizeof(T)); \
+  return strm.read(reinterpret_cast<char *>(t), sizeof(T));
 }
 
 // String case.
-inline std::istream &ReadType(std::istream &strm, std::string *s) {  // NOLINT
+inline std::istream &ReadType(std::istream &strm, std::string *s) {
   s->clear();
   int32 ns = 0;
   ReadType(strm, &ns);
@@ -158,22 +175,21 @@ std::istream &ReadType(std::istream &strm, std::unordered_map<T...> *c) {
 
 // Generic case.
 template <class T,
-    typename std::enable_if<std::is_class<T>::value, T>::type* = nullptr>
+          typename std::enable_if<std::is_class<T>::value, T>::type * = nullptr>
 inline std::ostream &WriteType(std::ostream &strm, const T t) {
   t.Write(strm);
   return strm;
 }
 
 // Numeric (boolean, integral, floating-point) case.
-template <class T,
-    typename std::enable_if<std::is_arithmetic<T>::value, T>::type* = nullptr>
+template <class T, typename std::enable_if<std::is_arithmetic<T>::value,
+                                           T>::type * = nullptr>
 inline std::ostream &WriteType(std::ostream &strm, const T t) {
   return strm.write(reinterpret_cast<const char *>(&t), sizeof(T));
 }
 
 // String case.
-inline std::ostream &WriteType(std::ostream &strm,  // NOLINT
-                               const std::string &s) {
+inline std::ostream &WriteType(std::ostream &strm, const std::string &s) {
   int32 ns = s.size();
   WriteType(strm, ns);
   return strm.write(s.data(), ns);
@@ -202,7 +218,7 @@ std::ostream &WriteType(std::ostream &strm, const std::unordered_set<T...> &c);
 // Pair case.
 template <typename S, typename T>
 inline std::ostream &WriteType(std::ostream &strm,
-                               const std::pair<S, T> &p) {  // NOLINT
+                               const std::pair<S, T> &p) {
   WriteType(strm, p.first);
   WriteType(strm, p.second);
   return strm;
@@ -263,13 +279,18 @@ std::ostream &WriteType(std::ostream &strm, const std::unordered_set<T...> &c) {
 
 // Utilities for converting between int64 or Weight and string.
 
-int64 StrToInt64(const std::string &s, const std::string &source, size_t nline,
+// Parses a 64-bit signed integer out of an input string. Returns a value iff
+// the entirety of the string is consumed during integer parsing, otherwise
+// returning `std::nullopt`.
+std::optional<int64> ParseInt64(std::string_view s);
+
+int64 StrToInt64(std::string_view s, std::string_view source, size_t nline,
                  bool allow_negative, bool *error = nullptr);
 
 template <typename Weight>
-Weight StrToWeight(const std::string &s) {
+Weight StrToWeight(std::string_view s) {
   Weight w;
-  std::istringstream strm(s);
+  std::istringstream strm(std::string{s});
   strm >> w;
   if (!strm) {
     FSTERROR() << "StrToWeight: Bad weight: " << s;
@@ -288,9 +309,11 @@ void WeightToStr(Weight w, std::string *s) {
 
 // Utilities for reading/writing integer pairs (typically labels).
 
-// Modifies line using a vector of pointers to a buffer beginning with line.
-void SplitString(char *line, const char *delim, std::vector<char *> *vec,
-                 bool omit_empty_strings);
+// Splits `line` on any of the chars in `delim`, dropping empty spans if
+// `omit_empty_strings` is true.
+std::vector<std::string_view> SplitString(std::string_view line,
+                                           std::string_view delim,
+                                           bool omit_empty_strings);
 
 template <typename I>
 bool ReadIntPairs(const std::string &source,
@@ -307,10 +330,9 @@ bool ReadIntPairs(const std::string &source,
   pairs->clear();
   while (strm.getline(line, kLineLen)) {
     ++nline;
-    std::vector<char *> col;
-    SplitString(line, "\n\t ", &col, true);
+    std::vector<std::string_view> col = SplitString(line, "\n\t ", true);
     // empty line or comment?
-    if (col.empty() || col[0][0] == '\0' || col[0][0] == '#') continue;
+    if (col.empty() || col[0].empty() || col[0][0] == '#') continue;
     if (col.size() != 2) {
       LOG(ERROR) << "ReadIntPairs: Bad number of columns, "
                  << "file = " << source << ", line = " << nline;
@@ -365,8 +387,8 @@ void ConvertToLegalCSymbol(std::string *s);
 
 // Utilities for stream I/O.
 
-bool AlignInput(std::istream &strm);
-bool AlignOutput(std::ostream &strm);
+bool AlignInput(std::istream &strm, size_t align = MappedFile::kArchAlignment);
+bool AlignOutput(std::ostream &strm, size_t align = MappedFile::kArchAlignment);
 
 // An associative container for which testing membership is faster than an STL
 // set if members are restricted to an interval that excludes most non-members.
@@ -380,10 +402,7 @@ class CompactSet {
 
   CompactSet() : min_key_(NoKey), max_key_(NoKey) {}
 
-  CompactSet(const CompactSet<Key, NoKey> &compact_set)
-      : set_(compact_set.set_),
-        min_key_(compact_set.min_key_),
-        max_key_(compact_set.max_key_) {}
+  CompactSet(const CompactSet &) = default;
 
   void Insert(Key key) {
     set_.insert(key);

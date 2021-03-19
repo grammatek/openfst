@@ -1,3 +1,17 @@
+// Copyright 2005-2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the 'License');
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an 'AS IS' BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // See www.openfst.org for extensive documentation on this weighted
 // finite-state transducer library.
 //
@@ -45,19 +59,20 @@ int mpdtreverse_main(int argc, char **argv) {
   std::unique_ptr<FstClass> ifst(FstClass::Read(in_name));
   if (!ifst) return 1;
 
-  if (FLAGS_mpdt_parentheses.empty()) {
+  if (FST_FLAGS_mpdt_parentheses.empty()) {
     LOG(ERROR) << argv[0] << ": No MPDT parenthesis label pairs provided";
     return 1;
   }
 
-  if (FLAGS_mpdt_new_parentheses.empty()) {
+  if (FST_FLAGS_mpdt_new_parentheses.empty()) {
     LOG(ERROR) << argv[0] << ": No MPDT output parenthesis label file provided";
     return 1;
   }
 
   std::vector<std::pair<int64, int64>> parens;
   std::vector<int64> assignments;
-  if (!ReadLabelTriples(FLAGS_mpdt_parentheses, &parens, &assignments, false)) {
+  if (!ReadLabelTriples(FST_FLAGS_mpdt_parentheses, &parens,
+                        &assignments, false)) {
     return 1;
   }
 
@@ -67,5 +82,6 @@ int mpdtreverse_main(int argc, char **argv) {
 
   if (!ofst.Write(out_name)) return 1;
 
-  return !WriteLabelTriples(FLAGS_mpdt_new_parentheses, parens, assignments);
+  return !WriteLabelTriples(FST_FLAGS_mpdt_new_parentheses, parens,
+                            assignments);
 }
